@@ -1,9 +1,9 @@
 GPU=0
-CUDNN=0
-CUDNN_HALF=0
-OPENCV=0
-AVX=0
+CUDNN=1
+OPENCV=1
 OPENMP=0
+CUDNN_HALF=0
+AVX=0
 LIBSO=0
 ZED_CAMERA=0
 ZED_CAMERA_v2_8=0
@@ -19,76 +19,29 @@ DEBUG=0
 
 ARCH= -gencode arch=compute_50,code=[sm_50,compute_50] \
       -gencode arch=compute_52,code=[sm_52,compute_52] \
-	    -gencode arch=compute_61,code=[sm_61,compute_61]
+      -gencode arch=compute_61,code=[sm_61,compute_61]
 
 OS := $(shell uname)
 
-# Naming confusion with recent RTX cards.
-# "NVIDIA Quadro RTX x000" and T1000/Tx00 are Turing Architecture Family with Compute Capability of 7.5
-# "NVIDIA RTX Ax000" are Ampere Architecture Family with Compute Capability of 8.6
-# NVIDIA "RTX x000 Ada" are Ada Lovelace Architecture Family with Compute Capability of 8.9
-# Source https://developer.nvidia.com/cuda-gpus
+# Directory for object files
+OBJDIR=obj
 
-# KEPLER, GeForce GTX 770, GTX 760, GT 740
-# ARCH= -gencode arch=compute_30,code=sm_30
-
-# MAXWELL, GeForce GTX 950, 960, 970, 980, 980 Ti, "GTX" Titan X
-# ARCH= -gencode arch=compute_52,code=sm_52
-
-# Jetson TX1, Tegra X1, DRIVE CX, DRIVE PX, Jetson Nano (2GB, 4GB)
-# ARCH= -gencode arch=compute_53,code=[sm_53,compute_53]
-
-# GP100/Tesla P100 - DGX-1
-# ARCH= -gencode arch=compute_60,code=sm_60
-
-# PASCAL, GTX 10x0, GTX 10x0 Ti, Titan Xp, Tesla P40, Tesla P4
-# ARCH= -gencode arch=compute_61,code=[sm_61,compute_61]
-
-# For Jetson TX2, Jetson Nano TX2 or Drive-PX2 uncomment:
-# ARCH= -gencode arch=compute_62,code=[sm_62,compute_62]
-
-# Tesla V100
-# ARCH= -gencode arch=compute_70,code=[sm_70,compute_70]
-
-# Jetson XAVIER, XAVIER NX
-# ARCH= -gencode arch=compute_72,code=[sm_72,compute_72]
-
-# GeForce Titan RTX, RTX 20x0, RTX 20x0 Ti, Quadro RTX x000, Tesla T4, XNOR Tensor Cores
-# ARCH= -gencode arch=compute_75,code=[sm_75,compute_75]
-
-# Tesla A100 (GA100), DGX-A100, A30, A100, RTX 3080
-# ARCH= -gencode arch=compute_80,code=[sm_80,compute_80]
-
-# GeForce RTX 30x0, 30x0 Ti, Tesla GA10x, RTX Axxxx, A2, A10, A16, A40
-# ARCH= -gencode arch=compute_86,code=[sm_86,compute_86]
-
-# NOT TESTED, THEORETICAL
-# Jetson ORIN, ORIN NX, ORIN NANO
-# ARCH= -gencode arch=compute_87,code=[sm_87,compute_87]
-
-# NOT TESTED, THEORETICAL
-# GeForce RTX 4070 Ti, 4080, 4090, L4, L40
-# ARCH= -gencode arch=compute_89,code=[sm_89,compute_89]
-
-# NOT TESTED, THEORETICAL
-# Nvidia H100
-# ARCH= -gencode arch=compute_90,code=[sm_90,compute_90]
-
-VPATH=./src/
+# Executable name
 EXEC=darknet
-OBJDIR=./obj/
 
 ifeq ($(LIBSO), 1)
 LIBNAMESO=libdarknet.so
 APPNAMESO=uselib
 endif
 
+# Compiler selection
 ifeq ($(USE_CPP), 1)
 CC=g++
 else
 CC=gcc
 endif
 
+# Compiler flags
 CPP=g++ -std=c++11
 NVCC=nvcc
 OPTS=-Ofast
@@ -96,6 +49,7 @@ LDFLAGS= -lm -pthread
 COMMON= -Iinclude/ -I3rdparty/stb/include
 CFLAGS=-Wall -Wfatal-errors -Wno-unused-result -Wno-unknown-pragmas -fPIC -rdynamic
 
+# Debugging options
 ifeq ($(DEBUG), 1)
 #OPTS= -O0 -g
 #OPTS= -Og -g
@@ -109,10 +63,17 @@ endif
 
 CFLAGS+=$(OPTS)
 
+# Conditional settings for Windows
 ifneq (,$(findstring MSYS_NT,$(OS)))
 LDFLAGS+=-lws2_32
+MKDIR=mkdir
+RM=rm -rf
+else
+MKDIR=mkdir
+RM=rm -rf
 endif
 
+# OpenCV configuration
 ifeq ($(OPENCV), 1)
 COMMON+= -DOPENCV
 CFLAGS+= -DOPENCV
@@ -120,6 +81,7 @@ LDFLAGS+= `pkg-config --libs opencv4 2> /dev/null || pkg-config --libs opencv`
 COMMON+= `pkg-config --cflags opencv4 2> /dev/null || pkg-config --cflags opencv`
 endif
 
+# OpenMP configuration
 ifeq ($(OPENMP), 1)
     ifeq ($(OS),Darwin) #MAC
 	    CFLAGS+= -Xpreprocessor -fopenmp
@@ -129,6 +91,7 @@ ifeq ($(OPENMP), 1)
 LDFLAGS+= -lgomp
 endif
 
+# CUDA configuration
 ifeq ($(GPU), 1)
 COMMON+= -DGPU -I/usr/local/cuda/include/
 CFLAGS+= -DGPU
@@ -139,6 +102,7 @@ LDFLAGS+= -L/usr/local/cuda/lib64 -lcuda -lcudart -lcublas -lcurand
 endif
 endif
 
+# cuDNN configuration
 ifeq ($(CUDNN), 1)
 COMMON+= -DCUDNN
 ifeq ($(OS),Darwin) #MAC
@@ -150,12 +114,14 @@ LDFLAGS+= -L/usr/local/cudnn/lib64 -lcudnn
 endif
 endif
 
+# cuDNN half configuration
 ifeq ($(CUDNN_HALF), 1)
 COMMON+= -DCUDNN_HALF
 CFLAGS+= -DCUDNN_HALF
 ARCH+= -gencode arch=compute_70,code=[sm_70,compute_70]
 endif
 
+# ZED SDK configuration
 ifeq ($(ZED_CAMERA), 1)
 CFLAGS+= -DZED_STEREO -I/usr/local/zed/include
 ifeq ($(ZED_CAMERA_v2_8), 1)
@@ -167,17 +133,25 @@ LDFLAGS+= -L/usr/local/zed/lib -lsl_zed
 endif
 endif
 
+# Object files list
 OBJ=image_opencv.o http_stream.o gemm.o utils.o dark_cuda.o convolutional_layer.o list.o image.o activations.o im2col.o col2im.o blas.o crop_layer.o dropout_layer.o maxpool_layer.o softmax_layer.o data.o matrix.o network.o connected_layer.o cost_layer.o parser.o option_list.o darknet.o detection_layer.o captcha.o route_layer.o writing.o box.o nightmare.o normalization_layer.o avgpool_layer.o coco.o dice.o yolo.o detector.o layer.o compare.o classifier.o local_layer.o swag.o shortcut_layer.o representation_layer.o activation_layer.o rnn_layer.o gru_layer.o rnn.o rnn_vid.o crnn_layer.o demo.o tag.o cifar.o go.o batchnorm_layer.o art.o region_layer.o reorg_layer.o reorg_old_layer.o super.o voxel.o tree.o yolo_layer.o gaussian_yolo_layer.o upsample_layer.o lstm_layer.o conv_lstm_layer.o scale_channels_layer.o sam_layer.o
+
+# CUDA specific object files
 ifeq ($(GPU), 1)
 LDFLAGS+= -lstdc++
 OBJ+=convolutional_kernels.o activation_kernels.o im2col_kernels.o col2im_kernels.o blas_kernels.o crop_layer_kernels.o dropout_layer_kernels.o maxpool_layer_kernels.o network_kernels.o avgpool_layer_kernels.o
 endif
 
-OBJS = $(addprefix $(OBJDIR), $(OBJ))
+# Full path for object files
+OBJS = $(addprefix $(OBJDIR)/, $(OBJ))
+
+# Dependencies
 DEPS = $(wildcard src/*.h) Makefile include/darknet.h
 
+# Targets
 all: $(OBJDIR) backup results setchmod $(EXEC) $(LIBNAMESO) $(APPNAMESO)
 
+# Shared library build
 ifeq ($(LIBSO), 1)
 CFLAGS+= -fPIC
 
@@ -188,28 +162,36 @@ $(APPNAMESO): $(LIBNAMESO) include/yolo_v2_class.hpp src/yolo_console_dll.cpp
 	$(CPP) -std=c++11 $(COMMON) $(CFLAGS) -o $@ src/yolo_console_dll.cpp $(LDFLAGS) -L ./ -l:$(LIBNAMESO)
 endif
 
+# Executable build
 $(EXEC): $(OBJS)
 	$(CPP) -std=c++11 $(COMMON) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
-$(OBJDIR)%.o: %.c $(DEPS)
+# Compilation rules for C files
+$(OBJDIR)/%.o: %.c $(DEPS)
 	$(CC) $(COMMON) $(CFLAGS) -c $< -o $@
 
-$(OBJDIR)%.o: %.cpp $(DEPS)
+# Compilation rules for C++ files
+$(OBJDIR)/%.o: %.cpp $(DEPS)
 	$(CPP) -std=c++11 $(COMMON) $(CFLAGS) -c $< -o $@
 
-$(OBJDIR)%.o: %.cu $(DEPS)
+# Compilation rules for CUDA files
+$(OBJDIR)/%.o: %.cu $(DEPS)
 	$(NVCC) $(ARCH) $(COMMON) --compiler-options "$(CFLAGS)" -c $< -o $@
 
+# Directory creation rules
 $(OBJDIR):
-	mkdir -p $(OBJDIR)
+	$(MKDIR) $(OBJDIR)
+
 backup:
-	mkdir -p backup
+	$(MKDIR) backup
+
 results:
-	mkdir -p results
+	$(MKDIR) results
+
 setchmod:
-	chmod +x *.sh
+	REM chmod +x *.sh
 
+# Clean target
 .PHONY: clean
-
 clean:
-	rm -rf $(OBJS) $(EXEC) $(LIBNAMESO) $(APPNAMESO)
+	$(RM) $(OBJS) $(EXEC) $(LIBNAMESO) $(APPNAMESO)
